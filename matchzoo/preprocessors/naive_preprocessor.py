@@ -1,4 +1,4 @@
-"""DSSM Preprocessor."""
+"""Naive Preprocessor."""
 
 import logging
 
@@ -30,13 +30,13 @@ class NaivePreprocessor(engine.BasePreprocessor):
 
     """
 
-    def fit(self, data_pack: DataPack, verbose=1):
+    def fit(self, data_pack: DataPack, verbose: int = 1):
         """
         Fit pre-processing context for transformation.
 
         :param data_pack: data_pack to be preprocessed.
         :param verbose: Verbosity.
-        :return: class:`DSSMPreprocessor` instance.
+        :return: class:`NaivePreprocessor` instance.
         """
         units = self._default_processor_units()
         data_pack = data_pack.apply_on_text(chain_transform(units),
@@ -46,7 +46,7 @@ class NaivePreprocessor(engine.BasePreprocessor):
         return self
 
     @engine.validate_context
-    def transform(self, data_pack: DataPack, verbose=1) -> DataPack:
+    def transform(self, data_pack: DataPack, verbose: int = 1) -> DataPack:
         """
         Apply transformation on data, create `tri-letter` representation.
 

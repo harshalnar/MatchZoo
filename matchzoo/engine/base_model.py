@@ -7,6 +7,7 @@ from pathlib import Path
 import dill
 import numpy as np
 import keras
+import keras.backend as K
 import pandas as pd
 
 import matchzoo
@@ -75,10 +76,6 @@ class BaseModel(abc.ABC):
         """
         params = engine.ParamTable()
         params.add(engine.Param(
-            name='name',
-            desc="Not related to the model\'s behavior."
-        ))
-        params.add(engine.Param(
             name='model_class', value=cls,
             desc="Model class. Used internally for save/load. "
                  "Changing this may cause unexpected behaviors."
@@ -92,8 +89,7 @@ class BaseModel(abc.ABC):
             desc="Decides model output shape, loss, and metrics."
         ))
         params.add(engine.Param(
-            name='optimizer',
-            hyper_space=hyper_spaces.choice(['adam', 'adgrad', 'rmsprop'])
+            name='optimizer', value='adam',
         ))
         if with_embedding:
             params.add(engine.Param(
@@ -109,7 +105,7 @@ class BaseModel(abc.ABC):
                 desc='Should be set manually.'
             ))
             params.add(engine.Param(
-                name='embedding_trainable',
+                name='embedding_trainable', value=True,
                 desc='`True` to enable embedding layer training, '
                      '`False` to freeze embedding parameters.'
             ))
@@ -120,20 +116,23 @@ class BaseModel(abc.ABC):
                      "Shouldn't be changed."
             ))
             params.add(engine.Param(
-                name='mlp_num_units',
-                desc="Number of units in first `mlp_num_layers` layers."
+                name='mlp_num_units', value=64,
+                desc="Number of units in first `mlp_num_layers` layers.",
+                hyper_space=hyper_spaces.quniform(8, 256, 8)
             ))
             params.add(engine.Param(
-                name='mlp_num_layers',
-                desc="Number of layers of the multiple layer percetron."
+                name='mlp_num_layers', value=3,
+                desc="Number of layers of the multiple layer percetron.",
+                hyper_space=hyper_spaces.quniform(1, 6)
             ))
             params.add(engine.Param(
-                name='mlp_num_fan_out',
+                name='mlp_num_fan_out', value=32,
                 desc="Number of units of the layer that connects the multiple "
-                     "layer percetron and the output."
+                     "layer percetron and the output.",
+                hyper_space=hyper_spaces.quniform(4, 128, 4)
             ))
             params.add(engine.Param(
-                name='mlp_activation_func',
+                name='mlp_activation_func', value='relu',
                 desc='Activation function used in the multiple '
                      'layer perceptron.'
             ))
@@ -151,12 +150,16 @@ class BaseModel(abc.ABC):
 
         :return: Default preprocessor.
         """
-        return matchzoo.preprocessors.NaivePreprocessor()
+        return matchzoo.preprocessors.BasicPreprocessor()
 
     @property
     def params(self) -> engine.ParamTable:
         """:return: model parameters."""
         return self._params
+
+    @params.setter
+    def params(self, val):
+        self._params = val
 
     @property
     def backend(self) -> keras.models.Model:
@@ -185,27 +188,23 @@ class BaseModel(abc.ABC):
         Compile model for training.
 
         Only `keras` native metrics are compiled together with backend.
-        MatchZoo metrics are evaluated only through :method:`evaluate`.
+        MatchZoo metrics are evaluated only through :meth:`evaluate`.
         Notice that `keras` count `loss` as one of the metrics while MatchZoo
         :class:`matchzoo.engine.BaseTask` does not.
 
         Examples:
             >>> from matchzoo import models
-            >>> model = models.NaiveModel()
+            >>> model = models.Naive()
             >>> model.guess_and_fill_missing_params(verbose=0)
             >>> model.params['task'].metrics = ['mse', 'map']
             >>> model.params['task'].metrics
-            ['mse', mean_average_precision(0)]
+            ['mse', mean_average_precision(0.0)]
             >>> model.build()
             >>> model.compile()
-            >>> model.backend.metrics_names
-            ['loss', 'mean_squared_error']
 
         """
-        _, keras_metrics = self._separate_metrics()
         self._backend.compile(optimizer=self._params['optimizer'],
-                              loss=self._params['task'].loss,
-                              metrics=keras_metrics)
+                              loss=self._params['task'].loss)
 
     def fit(
         self,
@@ -269,8 +268,7 @@ class BaseModel(abc.ABC):
         x: typing.Union[np.ndarray, typing.List[np.ndarray],
                         typing.Dict[str, np.ndarray]],
         y: np.ndarray,
-        batch_size: int = 128,
-        verbose: int = 1
+        batch_size: int = 128
     ) -> typing.Dict[str, float]:
         """
         Evaluate the model.
@@ -280,7 +278,6 @@ class BaseModel(abc.ABC):
         :param x: input data
         :param y: labels
         :param batch_size: number of samples per gradient update
-        :param verbose: verbosity mode, 0 or 1
         :return: scalar test loss (if the model has a single output and no
             metrics) or list of scalars (if the model has multiple outputs
             and/or metrics). The attribute `model.backend.metrics_names` will
@@ -291,10 +288,10 @@ class BaseModel(abc.ABC):
             >>> data_pack = mz.datasets.toy.load_data()
             >>> preprocessor = mz.preprocessors.NaivePreprocessor()
             >>> data_pack = preprocessor.fit_transform(data_pack)
-            >>> m = mz.models.DenseBaselineModel()
+            >>> m = mz.models.DenseBaseline()
             >>> m.params['task'] = mz.tasks.Ranking()
             >>> m.params['task'].metrics = [
-            ...     'acc', 'mse', 'mae',
+            ...     'acc', 'mse', 'mae', 'ce',
             ...     'average_precision', 'precision', 'dcg', 'ndcg',
             ...     'mean_reciprocal_rank', 'mean_average_precision', 'mrr',
             ...     'map', 'MAP',
@@ -310,28 +307,28 @@ class BaseModel(abc.ABC):
             >>> m.build()
             >>> m.compile()
             >>> x, y = data_pack.unpack()
-            >>> evals = m.evaluate(x, y, verbose=0)
+            >>> evals = m.evaluate(x, y)
             >>> type(evals)
             <class 'dict'>
 
         """
-        result = self._evaluate_backend(x, y, batch_size, verbose)
-        matchzoo_metrics, _ = self._separate_metrics()
+        result = {}
+        matchzoo_metrics, keras_metrics = self._separate_metrics()
+        y_pred = self.predict(x, batch_size)
+
+        for metric in keras_metrics:
+            metric_func = keras.metrics.get(metric)
+            result[metric] = K.eval(
+                metric_func(K.variable(y), K.variable(y_pred)))
+
         if matchzoo_metrics:
             if not isinstance(self.params['task'], tasks.Ranking):
                 raise ValueError("Matchzoo metrics only works on ranking.")
-            df = self._build_data_frame_for_eval(x, y, batch_size)
             for metric in matchzoo_metrics:
-                result[metric] = self._eval_metric_on_data_frame(metric, df)
-        return result
+                result[metric] = self._eval_metric_on_data_frame(
+                    metric, x['id_left'], y, y_pred)
 
-    def _evaluate_backend(self, x, y, batch_size, verbose):
-        vals = self._backend.evaluate(x=x, y=y,
-                                      batch_size=batch_size,
-                                      verbose=verbose)
-        if not isinstance(vals, list):
-            vals = [vals]
-        return dict(zip(self._backend.metrics_names, vals))
+        return result
 
     def _separate_metrics(self):
         matchzoo_metrics = []
@@ -340,19 +337,40 @@ class BaseModel(abc.ABC):
             if isinstance(metric, engine.BaseMetric):
                 matchzoo_metrics.append(metric)
             else:
-                keras_metrics.append(metric)
+                keras_metrics.append(self._remap_keras_metric(metric))
         return matchzoo_metrics, keras_metrics
 
-    def _build_data_frame_for_eval(self, x, y, batch_size):
-        y_pred = self.predict(x, batch_size)
-        return pd.DataFrame(data={
-            'id': x['id_left'],
+    def _remap_keras_metric(self, metric: str) -> str:
+        # TODO: note here, we do not support sparse label in classification.
+        lookup = {
+            tasks.Classification: {
+                'acc': 'categorical_accuracy',
+                'accuracy': 'categorical_accuracy',
+                'crossentropy': 'categorical_crossentropy',
+                'ce': 'categorical_crossentropy',
+            },
+            tasks.Ranking: {
+                'acc': 'binary_accuracy',
+                'accuracy': 'binary_accuracy',
+                'crossentropy': 'binary_crossentropy',
+                'ce': 'binary_crossentropy',
+            }
+        }
+        return lookup[type(self._params['task'])].get(metric, metric)
+
+    @classmethod
+    def _eval_metric_on_data_frame(
+        cls,
+        metric: engine.BaseMetric,
+        id_left: typing.Union[list, np.array],
+        y: typing.Union[list, np.array],
+        y_pred: typing.Union[list, np.array]
+    ):
+        eval_df = pd.DataFrame(data={
+            'id': id_left,
             'true': y.squeeze(),
             'pred': y_pred.squeeze()
         })
-
-    @classmethod
-    def _eval_metric_on_data_frame(cls, metric: engine.BaseMetric, eval_df):
         assert isinstance(metric, engine.BaseMetric)
         val = eval_df.groupby(by='id').apply(
             lambda df: metric(df['true'].values, df['pred'].values)
@@ -390,7 +408,7 @@ class BaseModel(abc.ABC):
         weights_path = dirpath.joinpath(self.BACKEND_WEIGHTS_FILENAME)
 
         if not dirpath.exists():
-            dirpath.mkdir()
+            dirpath.mkdir(parents=True)
         else:
             raise FileExistsError
 
@@ -437,28 +455,20 @@ class BaseModel(abc.ABC):
 
         :param verbose: Verbosity.
         """
-        self._params.get('name').set_default(self.__class__.__name__, verbose)
         self._params.get('task').set_default(tasks.Ranking(), verbose)
         self._params.get('input_shapes').set_default([(30,), (30,)], verbose)
-        self._params.get('optimizer').set_default('adam', verbose)
         if 'with_embedding' in self._params:
             self._params.get('embedding_input_dim').set_default(300, verbose)
             self._params.get('embedding_output_dim').set_default(300, verbose)
-            self._params.get('embedding_trainable').set_default(True, verbose)
-        if 'with_multi_layer_perceptron' in self._params:
-            self._params.get('mlp_num_layers').set_default(3, verbose)
-            self._params.get('mlp_num_units').set_default(64, verbose)
-            self._params.get('mlp_num_fan_out').set_default(32, verbose)
-            self._params.get('mlp_activation_func').set_default('relu',
-                                                                verbose)
 
-    def _set_param_default(self, name, default_val, verbose):
+    def _set_param_default(self, name: str,
+                           default_val: str, verbose: int = 0):
         if self._params[name] is None:
             self._params[name] = default_val
             if verbose:
                 print(f"Parameter \"{name}\" set to {default_val}.")
 
-    def _make_inputs(self):
+    def _make_inputs(self) -> list:
         input_left = keras.layers.Input(
             name='text_left',
             shape=self._params['input_shapes'][0]
@@ -469,7 +479,7 @@ class BaseModel(abc.ABC):
         )
         return [input_left, input_right]
 
-    def _make_output_layer(self):
+    def _make_output_layer(self) -> keras.layers.Layer:
         """:return: a correctly shaped keras dense layer for model output."""
         task = self._params['task']
         if isinstance(task, tasks.Classification):
@@ -479,7 +489,8 @@ class BaseModel(abc.ABC):
         else:
             raise ValueError("Invalid task type.")
 
-    def _make_embedding_layer(self, name='embedding'):
+    def _make_embedding_layer(self, name: str = 'embedding'
+                              ) -> keras.layers.Layer:
         return keras.layers.Embedding(
             self._params['embedding_input_dim'],
             self._params['embedding_output_dim'],
@@ -487,7 +498,7 @@ class BaseModel(abc.ABC):
             name=name
         )
 
-    def _make_multi_layer_perceptron_layer(self):
+    def _make_multi_layer_perceptron_layer(self) -> keras.layers.Layer:
         if not self._params['with_multi_layer_perceptron']:
             raise AttributeError
 

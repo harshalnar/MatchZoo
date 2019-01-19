@@ -6,6 +6,7 @@ if not USER_DIR.exists():
 USER_DATA_DIR = USER_DIR.joinpath('datasets')
 if not USER_DATA_DIR.exists():
     USER_DATA_DIR.mkdir()
+USER_TUNED_MODELS_DIR = USER_DIR.joinpath('tuned_models')
 
 from .logger import logger
 from .version import __version__
@@ -25,6 +26,8 @@ from .data_generator import PairDataGenerator
 from .data_generator import DynamicDataGenerator
 from .data_generator import DPoolDataGenerator
 from .data_generator import DPoolPairDataGenerator
+from .data_generator import HistogramDataGenerator
+from .data_generator import HistogramPairDataGenerator
 
 from . import tasks
 from . import metrics
@@ -36,6 +39,7 @@ from . import embedding
 from . import datasets
 from . import auto
 from . import layers
+from . import contrib
 
 from .engine import hyper_spaces
 from .engine import load_model

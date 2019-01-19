@@ -70,11 +70,10 @@ def test_duet(train_data_processed,
     duet.params['embedding_output_dim'] = 10
     duet.params['lm_filters'] =  32
     duet.params['lm_hidden_sizes'] = [16]
-    duet.params['lm_dropout_rate'] = 0.5
     duet.params['dm_filters'] = 32
     duet.params['dm_kernel_size'] = 3
     duet.params['dm_hidden_sizes'] = [16]
-    duet.params['dm_dropout_rate'] = 0.5
+    duet.params['dropout_rate'] = 0.5
     duet.params['activation_func'] = 'relu'
     duet.guess_and_fill_missing_params()
     duet.build()
@@ -93,6 +92,5 @@ def test_duet(train_data_processed,
         x, y = test_data_processed.unpack()
         results = duet.evaluate(x, y)
         assert len(results) > 0
-        assert type(results['loss']) == np.float64
     finally:
         shutil.rmtree('.tmpdir')

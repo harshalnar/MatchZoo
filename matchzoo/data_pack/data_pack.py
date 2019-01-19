@@ -85,7 +85,7 @@ class DataPack(object):
         return self._relation.shape[0]
 
     @property
-    def frame(self) -> 'FrameView':
+    def frame(self) -> 'DataPack.FrameView':
         """
         View the data pack as a :class:`pandas.DataFrame`.
 
@@ -93,7 +93,7 @@ class DataPack(object):
         the right dataframe and the relation data frame. Use `[]` to access
         an item or a slice of items.
 
-        :return: A :class:`FrameView instance.
+        :return: A :class:`matchzoo.DataPack.FrameView` instance.
 
         Example:
             >>> import matchzoo as mz
@@ -142,7 +142,7 @@ class DataPack(object):
         columns = list(frame.columns)
         if self.has_label:
             columns.remove('label')
-            y = np.vstack(frame['label'])
+            y = np.vstack(np.asarray(frame['label']))
         else:
             y = None
 
@@ -289,7 +289,7 @@ class DataPack(object):
         self._relation = self._relation.drop(columns='label')
 
     @_optional_inplace
-    def append_text_length(self):
+    def append_text_length(self, verbose=1):
         """
         Append `length_left` and `length_right` columns.
 
@@ -312,7 +312,7 @@ class DataPack(object):
 
         """
         self.apply_on_text(len, rename=('length_left', 'length_right'),
-                           inplace=True)
+                           inplace=True, verbose=verbose)
 
     @_optional_inplace
     def apply_on_text(
@@ -448,7 +448,8 @@ class DataPack(object):
             """
             self._data_pack = data_pack
 
-        def __getitem__(self, index):
+        def __getitem__(self, index: typing.Union[int, slice, np.array]
+                        ) -> 'DataPack':
             """Slicer."""
             dp = self._data_pack
             index = _convert_to_list_index(index, len(dp))

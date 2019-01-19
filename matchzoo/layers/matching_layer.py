@@ -14,7 +14,7 @@ class MatchingLayer(Layer):
         If set to True, then the output of the dot product
         is the cosine proximity between the two samples.
     :param matching_type: the similarity function for matching
-    :param **kwargs: Standard layer keyword arguments.
+    :param kwargs: Standard layer keyword arguments.
 
     Examples:
         >>> import matchzoo as mz
@@ -37,7 +37,7 @@ class MatchingLayer(Layer):
         self._shape2 = None
 
     @classmethod
-    def _validate_matching_type(cls, matching_type):
+    def _validate_matching_type(cls, matching_type: str = 'dot'):
         valid_matching_type = ['dot', 'mul', 'plus', 'minus', 'concat']
         if matching_type not in valid_matching_type:
             raise ValueError(f"{matching_type} is not a valid matching type, "

@@ -14,15 +14,15 @@ from matchzoo import tasks
 # Notice that each of such tuple will go through a full testing procedure, so
 # it's quite time consuming. Don't add customized_kwargs unless you have to.
 # Examples:
-# with no kwargs: (models.DenseBaselineModel, None)
-# with kwargs: (models.DenseBaselineModel, {"num_dense_units": 512})
+# with no kwargs: (models.DenseBaseline, None)
+# with kwargs: (models.DenseBaseline, {"num_dense_units": 512})
 model_setups = [
-    (models.NaiveModel, None, [np.float32, np.float32]),
-    (models.DenseBaselineModel, None, [np.float32, np.float32]),
-    (models.DSSMModel, None, [np.float32, np.float32]),
-    (models.CDSSMModel, None, [np.float32, np.float32]),
-    (models.ArcIModel, None, [np.int32, np.int32]),
-    (models.ArcIIModel, None, [np.int32, np.int32])
+    (models.Naive, None, [np.float32, np.float32]),
+    (models.DenseBaseline, None, [np.float32, np.float32]),
+    (models.DSSM, None, [np.float32, np.float32]),
+    (models.CDSSM, None, [np.float32, np.float32]),
+    (models.ArcI, None, [np.int32, np.int32]),
+    (models.ArcII, None, [np.int32, np.int32])
 ]
 
 
@@ -69,12 +69,16 @@ def x(compiled_model, num_samples):
                      lambda x: np.random.randint(low=0, high=100, size=x)
                  }
     input_shapes = model.params['input_shapes']
-    return [rand_func[dtype]([num_samples] + list(shape))
+
+    values = [rand_func[dtype]([num_samples] + list(shape))
             if None not in shape
             else rand_func[dtype]([num_samples] + [10, 900])
             for shape, dtype
             in zip(input_shapes, input_dtypes)]
-
+    return {'text_left': values[0],
+            'text_right': values[1],
+            'id_left': np.random.randint(low=0, high=1000, size=[num_samples])
+            }
 
 @pytest.fixture
 def y(compiled_model, num_samples):
@@ -96,7 +100,7 @@ def test_model_fit(compiled_model, x, y):
 @pytest.mark.slow
 def test_model_evaluate(compiled_model, x, y):
     model, input_dtypes = compiled_model
-    assert model.evaluate(x, y, verbose=0)
+    assert model.evaluate(x, y)
 
 
 @pytest.mark.slow

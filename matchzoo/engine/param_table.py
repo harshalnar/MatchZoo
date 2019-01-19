@@ -1,6 +1,7 @@
 """Parameters table class."""
 
 import typing
+import pandas as pd
 
 from matchzoo.engine import Param, hyper_spaces
 
@@ -65,6 +66,31 @@ class ParamTable(object):
                 full_space[param.name] = param_space
         return full_space
 
+    def to_frame(self) -> pd.DataFrame:
+        """
+        Convert the parameter table into a pandas data frame.
+
+        :return: A `pandas.DataFrame`.
+
+        Example:
+            >>> import matchzoo as mz
+            >>> table = mz.engine.ParamTable()
+            >>> table.add(mz.engine.Param(name='x', value=10, desc='my x'))
+            >>> table.add(mz.engine.Param(name='y', value=20, desc='my y'))
+            >>> table.to_frame()
+              Name Description  Value Hyper-Space
+            0    x        my x     10        None
+            1    y        my y     20        None
+
+        """
+        df = pd.DataFrame(data={
+            'Name': [p.name for p in self],
+            'Description': [p.desc for p in self],
+            'Value': [p.value for p in self],
+            'Hyper-Space': [p.hyper_space for p in self]
+        }, columns=['Name', 'Description', 'Value', 'Hyper-Space'])
+        return df
+
     def __getitem__(self, key: str) -> typing.Any:
         """:return: The value of the parameter in the table named `key`."""
         return self._params[key].value
@@ -94,7 +120,7 @@ class ParamTable(object):
         Example:
 
             >>> import matchzoo
-            >>> model = matchzoo.models.NaiveModel()
+            >>> model = matchzoo.models.Naive()
             >>> model.params.completed()
             False
             >>> model.guess_and_fill_missing_params(verbose=0)

@@ -1,5 +1,6 @@
 """Callbacks."""
 import typing
+from pathlib import Path
 
 import numpy as np
 import keras
@@ -25,6 +26,8 @@ class EvaluateAllMetrics(keras.callbacks.Callback):
     :param batch_size: Number of samples per evaluation. This only affects the
         evaluation of Keras metrics, since MatchZoo metrics are always
         evaluated using the full data.
+    :param model_save_path: Directory path to save the model after each
+        evaluate callback, (default: None, i.e., no saving.)
     :param verbose: Verbosity.
     """
 
@@ -35,6 +38,7 @@ class EvaluateAllMetrics(keras.callbacks.Callback):
         y: np.ndarray,
         once_every: int = 1,
         batch_size: int = 32,
+        model_save_path: str = None,
         verbose=1
     ):
         """Initializer."""
@@ -44,9 +48,10 @@ class EvaluateAllMetrics(keras.callbacks.Callback):
         self._dev_y = y
         self._valid_steps = once_every
         self._batch_size = batch_size
+        self._model_save_path = model_save_path
         self._verbose = verbose
 
-    def on_epoch_end(self, epoch, logs=None):
+    def on_epoch_end(self, epoch: int, logs: dict = None):
         """
         Called at the end of en epoch.
 
@@ -54,11 +59,14 @@ class EvaluateAllMetrics(keras.callbacks.Callback):
         :param logs: dictionary of logs.
         :return: dictionary of logs.
         """
-        if epoch % self._valid_steps == 0:
+        if (epoch + 1) % self._valid_steps == 0:
             val_logs = self._model.evaluate(self._dev_x, self._dev_y,
-                                            self._batch_size, verbose=0)
+                                            self._batch_size)
             if self._verbose:
                 print('Validation: ' + ' - '.join(
-                    f'{k}:{v:f}' for k, v in val_logs.items()))
+                    f'{k}: {v}' for k, v in val_logs.items()))
             for k, v in val_logs.items():
                 logs[k] = v
+            if self._model_save_path:
+                curr_path = self._model_save_path + str('%d/' % (epoch + 1))
+                self._model.save(curr_path)
