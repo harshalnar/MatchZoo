@@ -4,7 +4,7 @@ sudo: true
 
 env:
     global:
-        - PYTHONPATH=$PYTHONPATH:$TRAVIS_BUILD_DIR/tests:$TRAVIS_BUILD_DIR/matchzoo
+        - PYTHONPATH=$PYTHONPATH:$TRAVIS_BUILD_DIR/tests:$TRAVIS_BUILD_DIR/matchzoo/hkjgasydfsaigd
 
 matrix:
     include:
